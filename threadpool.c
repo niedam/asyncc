@@ -158,6 +158,16 @@ int defer(struct thread_pool *pool, runnable_t runnable) {
         fprintf(stderr, "%d: Mutex lock failure in defer\n", err);
         goto Exception;
     }
+
+    if (pool->destroy) {
+        if ((err = pthread_mutex_unlock(&pool->lock)) != 0) {
+            fprintf(stderr, "%d: Mutex unlock failure in defer\n", err);
+            goto Exception;
+        }
+        fprintf(stderr, "Can not defer on destroyed thread pool\n");
+        return -1;
+    }
+
     pool->defered_tasks++;
     queue_node *node = new_queue_node(runnable);
     if (pool->defered_tasks == 1) {
