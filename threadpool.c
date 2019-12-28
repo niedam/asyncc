@@ -2,10 +2,11 @@
 #include <stdio.h>
 #include "threadpool.h"
 
-struct queue_node {
-    queue_node *next; /**< Pointer to next element in queue */
+
+typedef struct queue_node {
+    struct queue_node *next; /**< Pointer to next element in queue */
     runnable_t runnable; /**< `runnable` assigment to node */
-};
+} queue_node_t;
 
 
 /**
@@ -13,8 +14,8 @@ struct queue_node {
  * @param[in] runnable - function to run
  * @return Pointer to allocated `queue_node`
  */
-static queue_node *new_queue_node(runnable_t runnable) {
-    queue_node *result = (queue_node*) malloc(sizeof(queue_node));
+static queue_node_t *new_queue_node(runnable_t runnable) {
+    queue_node_t *result = (queue_node_t*) malloc(sizeof(queue_node_t));
     if (result == NULL) {
         fprintf(stderr, "Malloc failure in new_queueu_node\n");
         goto Exception;
@@ -29,7 +30,7 @@ static queue_node *new_queue_node(runnable_t runnable) {
 
 static void *workers(void *arg) {
     thread_pool_t *pool = (struct thread_pool*) arg;
-    queue_node *node = NULL;
+    queue_node_t *node = NULL;
     int err = 0;
     while (1) {
         if ((err = pthread_mutex_lock(&pool->lock)) != 0) {
@@ -62,11 +63,8 @@ static void *workers(void *arg) {
             goto Exception;
         }
         node->runnable.function(node->runnable.arg, node->runnable.argsz);
-
         free(node);
-        node = NULL;
     }
-    return NULL;
     Exception: {
         exit(EXIT_FAILURE);
     }
@@ -113,15 +111,15 @@ int thread_pool_init(thread_pool_t *pool, size_t num_threads) {
 void thread_pool_destroy(struct thread_pool *pool) {
     void *res;
     int err = 0;
-    if ((err = pthread_mutex_lock(&pool->lock)) != 0) {
+    /*if ((err = pthread_mutex_lock(&pool->lock)) != 0) {
         fprintf(stderr, "%d: Mutex lock failure in thread_pool_destroy\n", err);
         goto Exception;
-    }
-    pool->destroy = 1;
-    if ((err = pthread_mutex_unlock(&pool->lock)) != 0) {
+    }*/
+    pool->destroy |= 1;
+    /*if ((err = pthread_mutex_unlock(&pool->lock)) != 0) {
         fprintf(stderr, "%d: Mutex unlock failure in thread_pool_destroy\n", err);
         goto Exception;
-    }
+    }*/
     if ((err = pthread_cond_broadcast(&pool->waiting_workers)) != 0) {
         fprintf(stderr, "%d: Cond broadcast failure in thread_pool_destroy\n", err);
         goto Exception;
@@ -132,7 +130,7 @@ void thread_pool_destroy(struct thread_pool *pool) {
             goto Exception;
         }
     }
-    queue_node *it = pool->head, *next_node;
+    queue_node_t *it = pool->head, *next_node;
     while (it != NULL) {
         next_node = it->next;
         free(it);
@@ -154,6 +152,8 @@ void thread_pool_destroy(struct thread_pool *pool) {
 
 int defer(struct thread_pool *pool, runnable_t runnable) {
     int err = 0;
+    if (pool->destroy == 1)
+        return -1;
     if ((err = pthread_mutex_lock(&pool->lock)) != 0) {
         fprintf(stderr, "%d: Mutex lock failure in defer\n", err);
         goto Exception;
@@ -164,17 +164,19 @@ int defer(struct thread_pool *pool, runnable_t runnable) {
             fprintf(stderr, "%d: Mutex unlock failure in defer\n", err);
             goto Exception;
         }
-        fprintf(stderr, "Can not defer on destroyed thread pool\n");
+        //fprintf(stderr, "Can not defer on destroyed thread pool\n");
         return -1;
     }
 
     pool->defered_tasks++;
-    queue_node *node = new_queue_node(runnable);
+    queue_node_t *node = new_queue_node(runnable);
+    queue_node_t *tail;
     if (pool->defered_tasks == 1) {
         pool->head = node;
         pool->tail = node;
     } else {
-        pool->tail->next = node;
+        tail = pool->tail;
+        tail->next = node;
         pool->tail = node;
     }
     if ((err = pthread_mutex_unlock(&pool->lock)) != 0) {
@@ -183,6 +185,11 @@ int defer(struct thread_pool *pool, runnable_t runnable) {
     }
     return 0;
     Exception: {
-        exit(EXIT_FAILURE);
+        if (pool->destroy != 1) {
+            exit(EXIT_FAILURE);
+        } else {
+            //fprintf(stderr, "Can not defer on destroyed thread pool\n");
+            return -1;
+        }
     }
 }

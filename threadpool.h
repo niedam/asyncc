@@ -5,8 +5,6 @@
 #include <pthread.h>
 
 
-typedef struct queue_node queue_node;
-
 typedef struct runnable {
   void (*function)(void *, size_t);
   void *arg;
@@ -16,7 +14,7 @@ typedef struct runnable {
 typedef struct thread_pool {
     size_t pool_size;
     pthread_t *workers;
-    queue_node *head, *tail;
+    void *head, *tail;
     pthread_mutex_t lock;
     pthread_cond_t waiting_workers;
     size_t defered_tasks; /**<  */

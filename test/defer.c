@@ -8,7 +8,7 @@
 
 int tests_run = 0;
 
-#define NROUNDS 10
+#define NROUNDS 20
 
 static void pong_ping(void *args, size_t argsz __attribute__((unused))) {
   sem_t *ping = args;

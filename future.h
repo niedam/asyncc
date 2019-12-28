@@ -15,8 +15,8 @@ typedef struct future {
     pthread_mutex_t lock;
     pthread_cond_t wait;
     int ready;
-    size_t count_waiting;
     void *result;
+    size_t ressz;
 } future_t;
 
 int async(thread_pool_t *pool, future_t *future, callable_t callable);
