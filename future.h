@@ -1,6 +1,8 @@
 #ifndef FUTURE_H
 #define FUTURE_H
 
+#include <pthread.h>
+
 #include "threadpool.h"
 
 typedef struct callable {
@@ -10,7 +12,11 @@ typedef struct callable {
 } callable_t;
 
 typedef struct future {
-
+    pthread_mutex_t lock;
+    pthread_cond_t wait;
+    int ready;
+    size_t count_waiting;
+    void *result;
 } future_t;
 
 int async(thread_pool_t *pool, future_t *future, callable_t callable);
