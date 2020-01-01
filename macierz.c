@@ -12,9 +12,7 @@ typedef struct task {
 
 static void *compute(void *args, size_t argsz __attribute__((unused)), size_t *result_size) {
     task_t *t = args;
-
-    //usleep(t->time);
-
+    usleep(t->time);
     *result_size = sizeof(int);
     return &t->result;
 }
@@ -37,8 +35,8 @@ int main() {
     for (int i = 0; i < k * n; i++) {
         scanf("%d %d", &tasks[i].result, &tasks[i].time);
         async(&pool, &computations[i], (callable_t){.function = compute, .arg = &tasks[i], .argsz = sizeof(task_t)});
-
     }
+
 
     int sum;
     int i_nk = 0;
@@ -54,4 +52,6 @@ int main() {
     }
 
     thread_pool_destroy(&pool);
+    free(computations);
+    free(tasks);
 }

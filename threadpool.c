@@ -2,7 +2,9 @@
 #include <stdio.h>
 #include "threadpool.h"
 
-
+/**
+ *
+ */
 typedef struct queue_node {
     struct queue_node *next; /**< Pointer to next element in queue */
     runnable_t runnable; /**< `runnable` task assigment to node */
@@ -27,6 +29,7 @@ static queue_node_t *new_queue_node(runnable_t runnable) {
         exit(EXIT_FAILURE);
     }
 }
+
 
 
 static void *workers(void *arg) {
@@ -207,7 +210,7 @@ int defer(struct thread_pool *pool, runnable_t runnable) {
         goto Exception;
     }
 
-    if ((err = pthread_cond_broadcast(&pool->lock)) != 0) {
+    if ((err = pthread_cond_broadcast(&pool->waiting_workers)) != 0) {
         // TODO
     }
 
