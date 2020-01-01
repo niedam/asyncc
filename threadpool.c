@@ -57,6 +57,13 @@ static void *workers(void *arg) {
         node = pool->head;
         pool->defered_tasks--;
         pool->head = node->next;
+        if (pool->count_waiting_workers > 0) {
+            if ((err = pthread_cond_broadcast(&pool->waiting_workers)) != 0) {
+                // TODO
+            }
+        }
+
+
         if ((err = pthread_mutex_unlock(&pool->lock)) != 0) {
             fprintf(stderr, "%d: Mutex unlock failure in workers\n", err);
             goto Exception;
@@ -161,22 +168,30 @@ int defer(struct thread_pool *pool, runnable_t runnable) {
     int err = 0;
     if (pool->destroy == 1)
         return -1;
-    if ((err = pthread_mutex_lock(&pool->lock)) != 0) {
-        fprintf(stderr, "%d: Mutex lock failure in defer\n", err);
-        goto Exception;
+    if (pthread_mutex_lock(&pool->lock) != 0) {
+        // Mutex lock failure, task didn't defer
+        return -1;
     }
 
     if (pool->destroy) {
         if ((err = pthread_mutex_unlock(&pool->lock)) != 0) {
+            // Unlocked mutex can cause errors.
             fprintf(stderr, "%d: Mutex unlock failure in defer\n", err);
             goto Exception;
         }
-        //fprintf(stderr, "Can not defer on destroyed thread pool\n");
         return -1;
     }
-
-    pool->defered_tasks++;
     queue_node_t *node = new_queue_node(runnable);
+    if (node == NULL) {
+        if ((err = pthread_mutex_unlock(&pool->lock)) != 0) {
+            // Unlocked mutex can cause errors.
+            fprintf(stderr, "%d: Mutex unlock failure in defer\n", err);
+            goto Exception;
+        }
+        // Memory allocation failure, task didn't defer
+        return -1;
+    }
+    pool->defered_tasks++;
     queue_node_t *tail;
     if (pool->defered_tasks == 1) {
         pool->head = node;
@@ -187,9 +202,15 @@ int defer(struct thread_pool *pool, runnable_t runnable) {
         pool->tail = node;
     }
     if ((err = pthread_mutex_unlock(&pool->lock)) != 0) {
+        // Unlocked mutex can cause errors.
         fprintf(stderr, "%d: Mutex unlock failure in defer\n", err);
         goto Exception;
     }
+
+    if ((err = pthread_cond_broadcast(&pool->lock)) != 0) {
+        // TODO
+    }
+
     return 0;
     Exception: {
         if (pool->destroy != 1) {
