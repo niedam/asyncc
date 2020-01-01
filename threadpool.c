@@ -5,7 +5,7 @@
 
 typedef struct queue_node {
     struct queue_node *next; /**< Pointer to next element in queue */
-    runnable_t runnable; /**< `runnable` assigment to node */
+    runnable_t runnable; /**< `runnable` task assigment to node */
 } queue_node_t;
 
 
@@ -28,6 +28,7 @@ static queue_node_t *new_queue_node(runnable_t runnable) {
     }
 }
 
+
 static void *workers(void *arg) {
     thread_pool_t *pool = (struct thread_pool*) arg;
     queue_node_t *node = NULL;
@@ -37,10 +38,10 @@ static void *workers(void *arg) {
             fprintf(stderr, "%d: Mutex lock failure in workers\n", err);
             goto Exception;
         }
-
         pool->count_waiting_workers++;
         while (pool->defered_tasks < 1) {
             if (pool->destroy) {
+                pool->count_waiting_workers--;
                 if ((err = pthread_mutex_unlock(&pool->lock)) != 0) {
                     fprintf(stderr, "%d: Mutex unlock failure in workers\n", err);
                     goto Exception;
@@ -53,11 +54,9 @@ static void *workers(void *arg) {
             }
         }
         pool->count_waiting_workers--;
-
         node = pool->head;
         pool->defered_tasks--;
         pool->head = node->next;
-
         if ((err = pthread_mutex_unlock(&pool->lock)) != 0) {
             fprintf(stderr, "%d: Mutex unlock failure in workers\n", err);
             goto Exception;
@@ -69,6 +68,7 @@ static void *workers(void *arg) {
         exit(EXIT_FAILURE);
     }
 }
+
 
 int thread_pool_init(thread_pool_t *pool, size_t num_threads) {
     int err = 0;
@@ -111,15 +111,22 @@ int thread_pool_init(thread_pool_t *pool, size_t num_threads) {
 void thread_pool_destroy(struct thread_pool *pool) {
     void *res;
     int err = 0;
-    /*if ((err = pthread_mutex_lock(&pool->lock)) != 0) {
+    if ((err = pthread_mutex_lock(&pool->lock)) != 0) {
         fprintf(stderr, "%d: Mutex lock failure in thread_pool_destroy\n", err);
         goto Exception;
-    }*/
+    }
+    if (pool->destroy) {
+        if ((err = pthread_mutex_unlock(&pool->lock)) != 0) {
+            fprintf(stderr, "%d: Mutex unlock failure in thread_pool_destroy\n", err);
+            goto Exception;
+        }
+        return;
+    }
     pool->destroy |= 1;
-    /*if ((err = pthread_mutex_unlock(&pool->lock)) != 0) {
+    if ((err = pthread_mutex_unlock(&pool->lock)) != 0) {
         fprintf(stderr, "%d: Mutex unlock failure in thread_pool_destroy\n", err);
         goto Exception;
-    }*/
+    }
     if ((err = pthread_cond_broadcast(&pool->waiting_workers)) != 0) {
         fprintf(stderr, "%d: Cond broadcast failure in thread_pool_destroy\n", err);
         goto Exception;
