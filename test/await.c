@@ -48,6 +48,26 @@ static char *test_map_simple() {
     future_t *last = malloc(sizeof(future_t));
     async(&pool, last, (callable_t){.function = add_four, .arg = n, .argsz = sizeof(int)});
 
+    future_t *fut = malloc(sizeof(future_t));
+    map(&pool, fut, last, add_four);
+
+    int *m = await(fut);
+    mu_assert("expected 4", *m == 8);
+    thread_pool_destroy(&pool);
+    free(m);
+    free(last);
+    free(fut);
+    return 0;
+}
+
+
+static char *test_100map_simple() {
+    thread_pool_init(&pool, 3);
+    int *n = (int*) malloc(sizeof(int));
+    *n = 0;
+    future_t *last = malloc(sizeof(future_t));
+    async(&pool, last, (callable_t){.function = add_four, .arg = n, .argsz = sizeof(int)});
+
     for (int i = 0; i < 99; i++) {
         future_t *fut = malloc(sizeof(future_t));
         map(&pool, fut, last, add_four);
@@ -61,8 +81,10 @@ static char *test_map_simple() {
 }
 
 static char *all_tests() {
-  mu_run_test(test_await_simple);
+  //mu_run_test(test_await_simple);
   mu_run_test(test_map_simple);
+  //mu_run_test(test_100map_simple);
+
   return 0;
 }
 

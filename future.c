@@ -8,6 +8,9 @@ typedef void *(*function_t)(void *);
 
 static int future_init(future_t *future) {
     int err;
+    if (future == NULL) {
+        return -1;
+    }
     future->ready = 0;
     future->result = NULL;
     future->ressz = 0;
@@ -40,6 +43,7 @@ static function_t call(void *args) {
     if ((err = pthread_cond_broadcast(&call->future->wait)) != 0) {
         exit(EXIT_FAILURE);
     }
+    free(args);
 }
 
 static function_t call_map(void *args) {
@@ -51,6 +55,7 @@ static function_t call_map(void *args) {
     if ((err = pthread_cond_broadcast(&call->result->wait)) != 0) {
         exit(EXIT_FAILURE);
     }
+    free(args);
 }
 
 
@@ -67,7 +72,7 @@ int async(thread_pool_t *pool, future_t *future, callable_t callable) {
     }
     fut_call->callable = callable;
     fut_call->future = future;
-    defer(pool, (runnable_t){.function=call, .arg=fut_call, .argsz=sizeof(future_call_t)});
+    defer(pool, (runnable_t){.function= call, .arg=fut_call, .argsz=sizeof(future_call_t)});
     return 0;
     Exception: {
         if ((err = pthread_cond_destroy(&future->wait)) != 0) {
@@ -85,8 +90,6 @@ int async(thread_pool_t *pool, future_t *future, callable_t callable) {
 
 void *await(future_t *future) {
     int err;
-    pthread_mutex_t a = PTHREAD_MUTEX_INITIALIZER;
-    void *result;
     if ((err = pthread_mutex_lock(&future->lock)) != 0) {
         fprintf(stderr, "%d: Mutex lock failure in await\n", err);
         exit(EXIT_FAILURE);
@@ -119,7 +122,7 @@ int map(thread_pool_t *pool, future_t *future, future_t *from,
     if ((err = future_init(future)) != 0) {
         return -1;
     }
-    map_call_t *map_call = (map_call_t*) malloc(sizeof(map_call));
+    map_call_t *map_call = (map_call_t*) malloc(sizeof(map_call_t));
     map_call->function = function;
     map_call->from = from;
     map_call->result = future;

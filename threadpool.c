@@ -19,8 +19,7 @@ typedef struct queue_node {
 static queue_node_t *new_queue_node(runnable_t runnable) {
     queue_node_t *result = (queue_node_t*) malloc(sizeof(queue_node_t));
     if (result == NULL) {
-        fprintf(stderr, "Malloc failure in new_queueu_node\n");
-        goto Exception;
+        return NULL;
     }
     result->next = NULL;
     result->runnable = runnable;
@@ -147,6 +146,7 @@ void thread_pool_destroy(struct thread_pool *pool) {
             goto Exception;
         }
     }
+    free(pool->workers);
     queue_node_t *it = pool->head, *next_node;
     while (it != NULL) {
         next_node = it->next;

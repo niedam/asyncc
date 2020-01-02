@@ -128,7 +128,7 @@ powinno spowodować pojawienie się na wyjściu
 
 120
 
-Wymagania techniczne
+###Wymagania techniczne
 
 Do synchronizacji można korzystać tylko z mechanizmów biblioteki pthreads. Można korzystać z plików nagłówkowych:
 ````
