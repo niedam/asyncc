@@ -15,6 +15,7 @@ typedef struct thread_pool {
     size_t pool_size;
     pthread_t *workers;
     void *head, *tail;
+    void *circ_node;
     pthread_mutex_t lock;
     pthread_cond_t waiting_workers;
     size_t defered_tasks; /**<  */

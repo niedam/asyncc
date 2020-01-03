@@ -81,9 +81,9 @@ static char *test_100map_simple() {
 }
 
 static char *all_tests() {
-  //mu_run_test(test_await_simple);
+  mu_run_test(test_await_simple);
   mu_run_test(test_map_simple);
-  //mu_run_test(test_100map_simple);
+  // mu_run_test(test_100map_simple);
 
   return 0;
 }

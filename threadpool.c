@@ -2,6 +2,96 @@
 #include <stdio.h>
 #include "threadpool.h"
 
+
+static struct thread_pool_monitor {
+    pthread_mutex_t lock;
+    int used;
+    void *queue;
+} monitor = {.lock = PTHREAD_MUTEX_INITIALIZER, .queue = NULL, .used = 0};
+
+void destroy_monitor() {
+    pthread_mutex_destroy(&monitor.lock);
+}
+
+typedef struct circ_queue_node {
+    thread_pool_t *pool;
+    struct circ_queue_node *next;
+    struct circ_queue_node *prev;
+} circ_queue_node_t;
+
+static circ_queue_node_t *new_circ_node(thread_pool_t *pool) {
+    circ_queue_node_t *result = malloc(sizeof(circ_queue_node_t));
+    if (result == NULL) {
+        return NULL;
+    }
+    result->pool = pool;
+    return result;
+}
+
+
+static circ_queue_node_t *thread_pool_monitor(thread_pool_t *pool) {
+    if (pthread_mutex_lock(&monitor.lock) != 0) {
+        goto exception;
+    }
+    if (monitor.used == 0) {
+        atexit(destroy_monitor);
+    }
+    circ_queue_node_t *new_node = new_circ_node(pool);
+    if (new_node == NULL) {
+        if (pthread_mutex_unlock(&monitor.lock) != 0) {
+            goto fatal_exception;
+        }
+        goto exception;
+    }
+    if (monitor.queue == NULL) {
+        new_node->next = new_node;
+        new_node->prev = new_node;
+        monitor.queue = new_node;
+    } else {
+        circ_queue_node_t *first = monitor.queue;
+        circ_queue_node_t *second = first->next;
+        first->next = new_node;
+        second->prev = new_node;
+        new_node->next = second;
+        new_node->prev = first;
+    }
+    if (pthread_mutex_unlock(&monitor.lock) != 0) {
+        goto fatal_exception;
+    }
+    return new_node;
+    exception:
+        return NULL;
+    fatal_exception:
+        exit(EXIT_FAILURE);
+}
+
+
+static void thread_pool_unmonitor(void *node) {
+    if (pthread_mutex_lock(&monitor.lock) != 0) {
+        goto fatal_exception;
+    }
+    circ_queue_node_t *circ_node = node;
+    circ_queue_node_t *next = circ_node->next;
+    circ_queue_node_t *prev = circ_node->prev;
+    if (monitor.queue == node) {
+        if (next == prev) {
+            monitor.queue = NULL;
+        } else {
+            monitor.queue = next;
+        }
+    }
+    next->prev = prev;
+    prev->next = next;
+    free(node);
+    if (pthread_mutex_unlock(&monitor.lock) != 0) {
+        goto fatal_exception;
+    }
+    return;
+    fatal_exception:
+        exit(EXIT_FAILURE);
+}
+
+
 /**
  *
  */
@@ -24,9 +114,6 @@ static queue_node_t *new_queue_node(runnable_t runnable) {
     result->next = NULL;
     result->runnable = runnable;
     return result;
-    Exception: {
-        exit(EXIT_FAILURE);
-    }
 }
 
 
@@ -80,14 +167,25 @@ static void *workers(void *arg) {
 
 
 int thread_pool_init(thread_pool_t *pool, size_t num_threads) {
-    int err = 0;
-    if ((err = pthread_mutex_init(&pool->lock, 0)) != 0) {
-        fprintf(stderr, "%d: Mutex init failure in thread_pool_init\n", err);
-        goto Exception;
+    if (pool == NULL) {
+        goto exception;
     }
-    if ((err = pthread_cond_init(&pool->waiting_workers, NULL)) != 0) {
-        fprintf(stderr, "%d: Condition init failure in thread_pool_init\n", err);
-        goto Exception;
+    circ_queue_node_t *node = thread_pool_monitor(pool);
+    if (node == NULL) {
+        goto exception;
+    }
+    if (pthread_mutex_init(&pool->lock, 0) != 0) {
+        //fprintf(stderr, "%d: Mutex init failure in thread_pool_init\n", err);
+        thread_pool_unmonitor(node);
+        goto exception;
+    }
+    if (pthread_cond_init(&pool->waiting_workers, NULL) != 0) {
+        //fprintf(stderr, "%d: Condition init failure in thread_pool_init\n", err);
+        thread_pool_unmonitor(node);
+        if (pthread_mutex_destroy(&pool->lock) != 0) {
+            goto fatal_exception;
+        }
+        goto exception;
     }
     pool->pool_size = num_threads;
     pool->head = NULL;
@@ -95,31 +193,54 @@ int thread_pool_init(thread_pool_t *pool, size_t num_threads) {
     pool->defered_tasks = 0;
     pool->count_waiting_workers = 0;
     pool->destroy = 0;
+    pool->circ_node = node;
     pthread_attr_t attr;
-    if ((err = pthread_attr_init (&attr)) != 0) {
-        fprintf(stderr, "%d: Pthread_attr init failure in thread_pool_init\n", err);
-        goto Exception;
+    if (pthread_attr_init (&attr) != 0) {
+        //fprintf(stderr, "%d: Pthread_attr init failure in thread_pool_init\n", err);
+        thread_pool_unmonitor(node);
+        if (pthread_mutex_destroy(&pool->lock) != 0 ||
+                pthread_cond_destroy(&pool->waiting_workers) != 0) {
+            goto fatal_exception;
+        }
+        goto exception;
     }
-    if ((err = pthread_attr_setdetachstate (&attr,PTHREAD_CREATE_JOINABLE)) != 0) {
-        fprintf(stderr, "%d: Pthread_attr setdetachstate failure in thread_pool_init\n", err);
-        goto Exception;
+    if (pthread_attr_setdetachstate (&attr,PTHREAD_CREATE_JOINABLE) != 0) {
+        //fprintf(stderr, "%d: Pthread_attr setdetachstate failure in thread_pool_init\n", err);
+        thread_pool_unmonitor(node);
+        if (pthread_mutex_destroy(&pool->lock) != 0 ||
+            pthread_cond_destroy(&pool->waiting_workers) != 0 ||
+            pthread_attr_destroy(&attr) != 0) {
+            goto fatal_exception;
+        }
+        goto exception;
     }
     pool->workers = (pthread_t*) malloc(sizeof(pthread_t) * num_threads);
+    if (pool->workers == NULL) {
+        thread_pool_unmonitor(node);
+        if (pthread_mutex_destroy(&pool->lock) != 0 ||
+            pthread_cond_destroy(&pool->waiting_workers) != 0 ||
+            pthread_attr_destroy(&attr) != 0) {
+            goto fatal_exception;
+        }
+        goto exception;
+    }
     for (size_t i = 0; i < num_threads; i++) {
-        if ((err = pthread_create(&pool->workers[i], &attr, workers, pool)) != 0) {
-            fprintf(stderr, "%d: Pthread_t create failure in thread_pool_init\n", err);
-            goto Exception;
+        if (pthread_create(&pool->workers[i], &attr, workers, pool) != 0) {
+            //fprintf(stderr, "%d: Pthread_t create failure in thread_pool_init\n", err);
+            goto fatal_exception;
         }
     }
     return 0;
-    Exception: {
+    exception:
+        return -1;
+    fatal_exception:
         exit(EXIT_FAILURE);
-    }
 }
 
 void thread_pool_destroy(struct thread_pool *pool) {
     void *res;
     int err = 0;
+    thread_pool_unmonitor(pool->circ_node);
     if ((err = pthread_mutex_lock(&pool->lock)) != 0) {
         fprintf(stderr, "%d: Mutex lock failure in thread_pool_destroy\n", err);
         goto Exception;
