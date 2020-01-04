@@ -32,7 +32,10 @@ int main() {
     comp->n = n;
     comp->value = 1;
     future_t *future = malloc(sizeof(future_t) * n);
-    async(&pool, future, (callable_t){.function = multiply, .arg = comp, .argsz = sizeof(factorial_t)});
+    if (async(&pool, future, (callable_t){.function = multiply, .arg = comp, .argsz = sizeof(factorial_t)}) != 0) {
+        // TODO;
+        return -1;
+    }
     for (int i = 1; i < n; i++) {
         map(&pool, future + i, future + (i - 1), multiply);
     }

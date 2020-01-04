@@ -17,7 +17,7 @@ static void *printY(void *args) {
 
 
 void *stop(void *parm) {
-    thread_pool_destroy((thread_pool_t*)parm);
+
 }
 
 int main() {
@@ -25,24 +25,27 @@ int main() {
     int err;
     pthread_attr_t attr;
     pthread_t thread;
-    if ((err = pthread_attr_init (&attr)) != 0) {
+    /*if ((err = pthread_attr_init (&attr)) != 0) {
         fprintf(stderr, "%d: Pthread_attr init failure in thread_pool_init\n", err);
         return -1;
     }
     if ((err = pthread_attr_setdetachstate (&attr,PTHREAD_CREATE_JOINABLE)) != 0) {
         fprintf(stderr, "%d: Pthread_attr setdetachstate failure in thread_pool_init\n", err);
         return -1;
+    }*/
+
+    thread_pool_init(&a, 10);
+
+
+    for (int i = 0; i < 100000000; i++) {
+        if (defer(&a, (runnable_t) {.argsz=1, .function=printX, .arg=NULL}) != 0) {
+            printf("NJE\n");
+        }
     }
 
-    thread_pool_init(&a, 4);
+    thread_pool_destroy(&a);
 
-
-    for (int i = 0; i < 100; i++) {
-        defer(&a, (runnable_t) {.argsz=1, .function=printX, .arg=NULL});
-
-    }
-
-    if ((err = pthread_create(&thread, &attr, stop, &a)) != 0) {
+    /*if ((err = pthread_create(&thread, &attr, stop, &a)) != 0) {
         fprintf(stderr, "%d: Pthread_t create failure in thread_pool_init\n", err);
         return -1;
     }
@@ -55,6 +58,6 @@ int main() {
     void * res;
     if ((err = pthread_join(thread, &res)) != 0) {
         return 1;
-    }
+    }*/
     return 0;
 }

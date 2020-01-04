@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <signal.h>
 #include "threadpool.h"
 
 
@@ -29,12 +30,45 @@ static circ_queue_node_t *new_circ_node(thread_pool_t *pool) {
 }
 
 
+static void catch(int sig __attribute__((unused))) {
+    if (pthread_mutex_lock(&monitor.lock) != 0) {
+        goto fatal_exception;
+    }
+    circ_queue_node_t *it = monitor.queue;
+    while (it != NULL) {
+        thread_pool_destroy(it->pool);
+        it = monitor.queue;
+        printf("aaa\n");
+    }
+    if (pthread_mutex_unlock(&monitor.lock) != 0) {
+        goto fatal_exception;
+    }
+    return;
+    fatal_exception:
+        exit(EXIT_FAILURE);
+}
+
 static circ_queue_node_t *thread_pool_monitor(thread_pool_t *pool) {
     if (pthread_mutex_lock(&monitor.lock) != 0) {
         goto exception;
     }
     if (monitor.used == 0) {
         atexit(destroy_monitor);
+
+        struct sigaction action;
+        sigset_t block_mask;
+        sigemptyset (&block_mask);
+
+        action.sa_handler = catch;
+        action.sa_mask = block_mask;
+        action.sa_flags = SA_RESTART | SA_NODEFER;
+
+        if (sigaction (SIGINT, &action, 0) == -1) {
+            // TODO
+        }
+        if (sigprocmask(SIG_BLOCK, &block_mask, 0) == -1) {
+            // TODO
+        }
     }
     circ_queue_node_t *new_node = new_circ_node(pool);
     if (new_node == NULL) {
