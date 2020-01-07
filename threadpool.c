@@ -4,58 +4,82 @@
 #include <stdbool.h>
 #include "threadpool.h"
 
-
+/** @brief Globalny monitor zarządzający przekazywaniem sygnałów.
+ */
 static struct thread_pool_monitor {
-    pthread_mutex_t lock;
-    pthread_cond_t wait;
-    int used;
-    void *queue;
-    int flag[2];
-    int turn;
-    int signaled;
-    int count_threads;
+    pthread_mutex_t lock; /**< Zamek do monitora realizujący wzajemne wykluczenie (nie dotyczy obsługi sygnałów). */
+    pthread_cond_t wait; /**< Zmienna warunkowa do czekania na zakończenie wszystkich wątków, którym wysłano sygnał. */
+    int used; /**< Flaga czy zostało zlecone zniszczenie monitora na `exit` lub `return` w main. */
+    void *queue; /**< Kolejka pul, które mają otrzymać sygnał */
+    int flag[2]; /**< Flagi do algorytmu Petersona. */
+    int turn; /**< Czyja kolej w algorytmie Petersona. */
+    int signaled; /**< Liczba pul, którym wysłano sygnał. */
+    int count_threads; /**< Liczba pul, które już zakończyły pracę po sygnale */
 } monitor = {.lock = PTHREAD_MUTEX_INITIALIZER, .queue = NULL, .used = 0, .flag = {0, 0}, .signaled = 0,
         .wait = PTHREAD_COND_INITIALIZER, .count_threads = 0};
 
+/** @brief Węzeł kolejki cyklicznej pul oczekujących na sygnał w monitorze.
+ */
 typedef struct circ_queue_node {
-    thread_pool_t *pool;
-    struct circ_queue_node *next;
-    struct circ_queue_node *prev;
+    thread_pool_t *pool; /**< Wskaźnik do puli */
+    struct circ_queue_node *next; /**< Wskaźnik do następnego węzła. */
+    struct circ_queue_node *prev; /**< Wskaźnik do poprzedniego węzła. */
 } circ_queue_node_t;
 
-typedef struct join_queue_node {
-    pthread_t thread;
-    struct join_queue_node *next;
-} join_queue_node_t;
+/** @brief Węzeł kolejki zadań w `thread_pool`.
+ */
+typedef struct queue_node {
+    struct queue_node *next; /**< Wskaźnik na następny węzeł kolejki. */
+    runnable_t runnable; /**< Zlecone zadanie `runnable`  */
+} queue_node_t;
 
 
-void destroy_monitor() {
+/** @brief Funkcja do wykonania w `atexit`.
+ * @return void
+ */
+static void destroy_monitor() {
     if (pthread_mutex_destroy(&monitor.lock) != 0  ||
         pthread_cond_destroy(&monitor.wait) != 0) {
         goto really_fatal_exception;
     }
     return;
     really_fatal_exception:
-    _Exit(EXIT_FAILURE);
+        _Exit(EXIT_FAILURE);
 }
 
 
+/** @brief Przekazanie informacji o zniszczeniu puli przez sygnał do monitora.
+ * @return void
+ */
 static void thread_pool_signal_done() {
-    join_queue_node_t *node = malloc(sizeof(join_queue_node_t));
-    if (node == NULL) {
-        exit(EXIT_FAILURE);
+    if (pthread_mutex_lock(&monitor.lock) != 0) {
+        goto fatal_exception;
+    }
+    monitor.flag[0] = 1;
+    monitor.turn = 1;
+    while (monitor.flag[1] == 1 && monitor.turn == 1) {
+        // aktywne oczekiwanie
     }
     monitor.count_threads++;
     if (monitor.signaled == monitor.count_threads) {
         if (pthread_cond_signal(&monitor.wait) != 0) {
-            exit(EXIT_FAILURE);
+            goto fatal_exception;
         }
     }
+    monitor.flag[0] = 0;
     if (pthread_mutex_unlock(&monitor.lock) != 0) {
-        exit(EXIT_FAILURE);
+        goto fatal_exception;
     }
+    return;
+    fatal_exception:
+        exit(EXIT_FAILURE);
 }
 
+
+/** @brief Stworzenie nowego `circ_queue_node`.
+ * @param pool[in] - pula z którą ma być związany węzeł
+ * @return Węzeł do kolejki cyklicznej dla wątków w monitorze.
+ */
 static circ_queue_node_t *new_circ_node(thread_pool_t *pool) {
     circ_queue_node_t *result = malloc(sizeof(circ_queue_node_t));
     if (result == NULL) {
@@ -66,15 +90,22 @@ static circ_queue_node_t *new_circ_node(thread_pool_t *pool) {
 }
 
 
+/** @brief Handler sygnału SIGINT.
+ * Funkcja przetwarzająca sygnał SIGINT wysłany do procesu.
+ * Na potrzeby funkcji konieczne było zapewnienie dodatkowego wzajemnego wykluczenia w dostępie do monitora
+ * przy użyciu algorytmu Petersona (w `sigaction` nie można korzystać z mechanizmów synchronizujących pthreads).
+ * @param sig[] - kod sygnału (nieużywany)
+ */
 static void catch(int sig __attribute__((unused))) {
     monitor.flag[1] = 1;
     monitor.turn = 0;
     while (monitor.flag[0] == 1 && monitor.turn == 0) {
-        // busy wait
+        // aktywne oczekiwanie
     }
     circ_queue_node_t *curr = monitor.queue;
     circ_queue_node_t *start = monitor.queue;
-    if (monitor.queue != 0) {
+    // Ustawienie pulom flag o sygnale SIGINT.
+    if (monitor.queue != NULL) {
         do {
             curr->pool->signal = 1;
             curr = curr->next;
@@ -84,14 +115,20 @@ static void catch(int sig __attribute__((unused))) {
     monitor.flag[1] = 0;
 }
 
+
+/** @brief Zgłoszenie puli do odbierania sygnałów.
+ * @param pool[in] - wskaźnik na zgłaszaną pulę
+ * @return Reprezentant puli w monitorze
+ */
 static circ_queue_node_t *thread_pool_monitor(thread_pool_t *pool) {
     if (pthread_mutex_lock(&monitor.lock) != 0) {
         goto exception;
     }
+
     monitor.flag[0] = 1;
     monitor.turn = 1;
     while (monitor.flag[1] == 1 && monitor.turn == 1) {
-        // busy wait
+        // aktywne oczekiwanie
     }
     if (monitor.used == 0) {
         atexit(destroy_monitor);
@@ -142,6 +179,10 @@ static circ_queue_node_t *thread_pool_monitor(thread_pool_t *pool) {
 }
 
 
+/** @brief Anulowanie odbierania sygnału SIGINT przez pulę.
+ * @param node[in] - reprezentant puli w monitorze utworzony przez `thread_pool_monitor(...)`
+ * @return void
+ */
 static void thread_pool_unmonitor(void *node) {
     if (pthread_mutex_lock(&monitor.lock) != 0) {
         goto fatal_exception;
@@ -149,7 +190,7 @@ static void thread_pool_unmonitor(void *node) {
     monitor.flag[0] = 1;
     monitor.turn = 1;
     while (monitor.flag[1] == 1 && monitor.turn == 1) {
-        // busy wait
+        // aktywne oczekiwanie
     }
     circ_queue_node_t *circ_node = node;
     circ_queue_node_t *next = circ_node->next;
@@ -164,29 +205,19 @@ static void thread_pool_unmonitor(void *node) {
     next->prev = prev;
     prev->next = next;
     monitor.flag[0] = 0;
-    free(node);
     if (pthread_mutex_unlock(&monitor.lock) != 0) {
         goto fatal_exception;
     }
+    free(node);
     return;
     fatal_exception:
-    exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
 }
 
 
-/**
- *
- */
-typedef struct queue_node {
-    struct queue_node *next; /**< Pointer to next element in queue */
-    runnable_t runnable; /**< `runnable` task assigment to node */
-} queue_node_t;
-
-
-/**
- *
- * @param[in] runnable - function to run
- * @return Pointer to allocated `queue_node`
+/** @brief Stworzenie nowego węzła do kolejki zadań w puli.
+ * @param runnable[in] - zadanie do wykonania w puli
+ * @return Wskaźnik na zaalokowany węzeł kolejki
  */
 static queue_node_t *new_queue_node(runnable_t runnable) {
     queue_node_t *result = (queue_node_t*) malloc(sizeof(queue_node_t));
@@ -199,7 +230,10 @@ static queue_node_t *new_queue_node(runnable_t runnable) {
 }
 
 
-
+/** @brief Funkcja wątków roboczych puli `thread_pool`.
+ * @param arg[in, out] - wskaznik na pulę z którą związany jest wątek
+ * @return NULL
+ */
 static void *workers(void *arg) {
     thread_pool_t *pool = (struct thread_pool*) arg;
     queue_node_t *node = NULL;
