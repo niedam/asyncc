@@ -3,8 +3,6 @@
 #include <stdio.h>
 
 
-typedef void *(*function_t)(void *);
-
 /** @brief Struktura będąca argumentem dla `async`.
  */
 typedef struct future_call {
@@ -20,9 +18,9 @@ typedef struct map_call {
     future_t *result; /**< Future gdzie mamy zapisać wynik. */
     void *(*function)(void *, size_t, size_t *);
     /**< @brief Funkcja do wykonania.
-     *  @param arg[in, out] - wskaźnik na argument funkcji
-     *  @param size[in] - rozmiar argumentu funkcji
-     *  @param rsiz[out] - wskaźnik gdzie funkcja może wpisać rozmiar wyniku
+     *  @param p1[in, out] - wskaźnik na argument funkcji
+     *  @param p2[in] - rozmiar argumentu funkcji
+     *  @param p3[out] - wskaźnik gdzie funkcja może wpisać rozmiar wyniku
      *  @return Wskaźnik do wyniku funkcji.
      */
 } map_call_t;

@@ -23,9 +23,9 @@ typedef struct callable {
 
 
 /** @brief Struktura mechanizmu Future.
- * Użytkownik biblioteki jest odpowiedzialny za zarządzanie pamięcią wskazywaną przez `*result`
- * oraz do zwolnienia mechanizmów pthread `lock` i `wait` po zakończeniu pracy z biblioteką.
- * Inne zmiany pól w strukturze przez użytkownika biblioteki może wywołać nieokreślone działanie programu.
+ * Użytkownik biblioteki jest odpowiedzialny za zarządzanie pamięcią wskazywaną przez `*result`,
+ * ale nie powinien ingerować we wskaźniki `*lock` i `*wait`.
+ * Zmiany pól w strukturze przez użytkownika biblioteki może wywołać nieokreślone działanie programu.
  */
 typedef struct future {
     pthread_mutex_t *lock; /**< Zamek ograniczający dostęp */

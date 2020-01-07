@@ -29,7 +29,7 @@ typedef struct circ_queue_node {
  */
 typedef struct queue_node {
     struct queue_node *next; /**< Wskaźnik na następny węzeł kolejki. */
-    runnable_t runnable; /**< Zlecone zadanie `runnable`  */
+    runnable_t runnable; /**< Zlecone zadanie `runnable`. */
 } queue_node_t;
 
 
@@ -99,7 +99,7 @@ static circ_queue_node_t *new_circ_node(thread_pool_t *pool) {
  * Funkcja przetwarzająca sygnał SIGINT wysłany do procesu.
  * Na potrzeby funkcji konieczne było zapewnienie dodatkowego wzajemnego wykluczenia w dostępie do monitora
  * przy użyciu algorytmu Petersona (w `sigaction` nie można korzystać z mechanizmów synchronizujących pthreads).
- * @param sig[] - kod sygnału (nieużywany)
+ * @param sig[in] - kod sygnału (nieużywany)
  */
 static void catch(int sig __attribute__((unused))) {
     monitor.flag[1] = 1;
