@@ -25,13 +25,13 @@ typedef struct runnable {
  * Zmiana pól w strukturze przez użytkownika biblioteki może wywołać nieokreślone działanie programu.
  */
 typedef struct thread_pool {
-    pthread_mutex_t lock; /**< Zamek realizujący wzajemne wykluczenie wątków używających puli. */
+    pthread_mutex_t *lock; /**< Zamek realizujący wzajemne wykluczenie wątków używających puli. */
     size_t pool_size; /**< Liczba wątków działająca w puli. */
     pthread_t *workers; /**< Tablica identyfikatorów wątków z puli. */
     void *head; /**< Wskaźnik na początek kolejki zleconych zadań. */
     void *tail; /**< Wskaźnik na koniec kolejki zleconych zadań. */
     void *circ_node; /**< Wskaźnik do odbierania sygnału SIGINT. */
-    pthread_cond_t waiting_workers; /**< Zmienna warunkowa dla procesów z puli do czekania na zadania. */
+    pthread_cond_t *waiting_workers; /**< Zmienna warunkowa dla procesów z puli do czekania na zadania. */
     size_t defered_tasks; /**< Liczba zleconych zadań. */
     size_t count_waiting_workers; /**< Liczba wątków czekających na zadanie. */
     int destroy; /**< Flaga dotycząca zniszczenia puli. */

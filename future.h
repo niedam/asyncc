@@ -28,8 +28,8 @@ typedef struct callable {
  * Inne zmiany pól w strukturze przez użytkownika biblioteki może wywołać nieokreślone działanie programu.
  */
 typedef struct future {
-    pthread_mutex_t lock; /**< Zamek ograniczający dostęp */
-    pthread_cond_t wait; /**< Zmienna warunkowa do oczekiwania na wynik */
+    pthread_mutex_t *lock; /**< Zamek ograniczający dostęp */
+    pthread_cond_t *wait; /**< Zmienna warunkowa do oczekiwania na wynik */
     int ready; /**< Flaga oznaczająca gotowy/niegotowy wynik */
     void *result; /**< Wskaźnik na wynik obliczeń */
     size_t ressz; /**< Rozmiar wyniku (do odczytu dla użytkownika). */

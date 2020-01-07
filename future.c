@@ -36,18 +36,38 @@ static int future_init(future_t *future) {
     if (future == NULL) {
         return -1;
     }
+    int mutex_cond = 0;
+    future->lock = malloc(sizeof(pthread_mutex_t));
+    if (future->lock == NULL) {
+        goto exception;
+    }
+    future->wait = malloc(sizeof(pthread_cond_t));
+    if (future->wait == NULL) {
+        goto exception;
+    }
+    mutex_cond = 1;
     future->ready = 0;
     future->result = NULL;
     future->ressz = 0;
-    if (pthread_cond_init(&future->wait, NULL) != 0) {
+    if (pthread_cond_init(future->wait, NULL) != 0) {
         goto exception;
     }
-    if (pthread_mutex_init(&future->lock, NULL) != 0) {
+    if (pthread_mutex_init(future->lock, NULL) != 0) {
+        if (pthread_cond_destroy(future->wait) != 0) {
+            fprintf(stderr, "Cond destroy failure in future_init\n");
+            goto fatal_exception;
+        }
         goto exception;
     }
     return 0;
     exception:
+        if (mutex_cond == 1) {
+            free(future->lock);
+            free(future->wait);
+        }
         return -1;
+    fatal_exception:
+        exit(EXIT_FAILURE);
 }
 
 
@@ -61,7 +81,7 @@ static void call_comp(void *arg, size_t args __attribute__((unused))) {
     call->future->result = call->callable.function(call->callable.arg, call->callable.argsz, &call->future->ressz);
     // Bez robienia locka, bo nie narusza bezpieczeństwa.
     call->future->ready = 1;
-    if (pthread_cond_broadcast(&call->future->wait) != 0) {
+    if (pthread_cond_broadcast(call->future->wait) != 0) {
         fprintf(stderr, "Cond broadcast failure in call_com\n");
         goto fatal_exception;
     }
@@ -83,7 +103,7 @@ static void call_map(void *arg, size_t argss __attribute__((unused))) {
     call->result->result = call->function(call->from->result, call->from->ressz, &call->result->ressz);
     // Bez robienia locka, ponieważ nie narusza bezpieczeństwa.
     call->result->ready = 1;
-    if (pthread_cond_broadcast(&call->result->wait) != 0) {
+    if (pthread_cond_broadcast(call->result->wait) != 0) {
         fprintf(stderr, "Cond broadcast failure in call_map\n");
         goto fatal_exception;
     }
@@ -109,11 +129,11 @@ int async(thread_pool_t *pool, future_t *future, callable_t callable) {
     }
     return 0;
     exception: {
-        if (pthread_cond_destroy(&future->wait) != 0) {
+        if (pthread_cond_destroy(future->wait) != 0) {
             fprintf(stderr, "Cond destroy failure in async\n");
             goto fatal_exception;
         }
-        if (pthread_mutex_destroy(&future->lock) != 0) {
+        if (pthread_mutex_destroy(future->lock) != 0) {
             fprintf(stderr, "Mutex destroy failure in async\n");
             goto fatal_exception;
         }
@@ -125,31 +145,33 @@ int async(thread_pool_t *pool, future_t *future, callable_t callable) {
 
 
 void *await(future_t *future) {
-    if (pthread_mutex_lock(&future->lock) != 0) {
+    if (pthread_mutex_lock(future->lock) != 0) {
         fprintf(stderr, "Mutex lock failure in await\n");
         goto fatal_exception;
     }
     while (future->ready != 1) {
-        if (pthread_cond_wait(&future->wait, &future->lock) != 0) {
+        if (pthread_cond_wait(future->wait, future->lock) != 0) {
             fprintf(stderr, "Cond wait failure in await\n");
             goto fatal_exception;
         }
     }
-    if (pthread_mutex_unlock(&future->lock) != 0) {
+    if (pthread_mutex_unlock(future->lock) != 0) {
         fprintf(stderr, "Mutex unlock failure in await\n");
         goto fatal_exception;
     }
-    if (pthread_cond_destroy(&future->wait) != 0) {
+    if (pthread_cond_destroy(future->wait) != 0) {
         fprintf(stderr, "Cond destroy failure in await\n");
         goto fatal_exception;
     }
-    if (pthread_mutex_destroy(&future->lock) != 0) {
+    if (pthread_mutex_destroy(future->lock) != 0) {
         fprintf(stderr, "Mutex destroy failure in await\n");
         goto fatal_exception;
     }
+    free(future->lock);
+    free(future->wait);
     return future->result;
     fatal_exception:
-    exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
 }
 
 
