@@ -7,26 +7,26 @@
 
 int n, k;
 
-/**
- * Task connected with cell from matrix.
+/** @brief Zadanie obliczeniowe związane z konkretną komórką macierzy.
  */
 typedef struct task {
-    int time; /**< Time to complete task */
-    int result; /**< Result of task */
+    int time; /**< Czas na ukończenie zadania. */
+    int result; /**< Wynik zadania obliczeniowego. */
 } task_t;
 
+
+/** @brief Monitor zapewniający synchronizację wątków sumujących swoje wyniki.
+ */
 struct matrix_monitor {
-    pthread_mutex_t lock;
-    pthread_cond_t wait;
-    int sum;
-    int count;
+    pthread_mutex_t lock; /**< Zamek na monitor. */
+    pthread_cond_t wait; /**< Oczekiwanie na gotowy wynik. */
+    int sum; /**< Wynik sumowania. */
+    int count; /**< Liczba zsumowanych komórek. */
 } matrix_monitor = {.lock = PTHREAD_MUTEX_INITIALIZER, .wait = PTHREAD_COND_INITIALIZER, .sum = 0, .count = 0};
 
-/**
- * Do single task and return result.
- * @param[in] args - pointer to task
- * @param[in] argsz - size of pointed memory by `args`
- * @param[out] resz - size of memory returned as result
+/** @brief Pojedyńcze zadanie obliczeniowe.
+ * @param[in] args - wskaźnik na opis zadania
+ * @param[in] argsz - rozmiar `args`
  */
 static void compute(void *args, size_t argsz __attribute__((unused))) {
     task_t *t = args;
@@ -46,6 +46,10 @@ static void compute(void *args, size_t argsz __attribute__((unused))) {
     }
 }
 
+
+/** @brief Blokuje wątek do czasu aż w monitorze nie zsumowane zostanie `n` liczb.
+ * @result void
+ */
 void wait_on_complete() {
     if (pthread_mutex_lock(&matrix_monitor.lock) != 0) {
         exit(EXIT_FAILURE);
@@ -61,6 +65,10 @@ void wait_on_complete() {
     }
 }
 
+
+/** @brief Zerowanie liczników w monitorze.
+ * @return void
+ */
 void reset_monitor() {
     if (pthread_mutex_lock(&matrix_monitor.lock) != 0) {
         exit(EXIT_FAILURE);
@@ -76,23 +84,22 @@ void reset_monitor() {
 int main() {
     int err;
     thread_pool_t pool;
-    // Init thread pool.
+    // Inicjacja puli.
     if ((err = thread_pool_init(&pool, POOLSIZE)) != 0) {
         fprintf(stderr, "%d: Pool init failure in macierz\n", err);
         return(-1);
     }
-    // Read size of matrix.
+    // Przeczytanie rozmiaru macierzy.
     scanf("%d", &k);
     scanf("%d", &n);
-    // Allocate resource for computations.
+    // Zaalokowanie zasobów.
     future_t *computations = malloc(sizeof(future_t) * k * n);
     task_t *tasks = malloc(sizeof(struct task) * k * n);
-    // Assign tasks
+    // Przypisywanie zadań.
     for (int i = 0; i < k * n; i++) {
         scanf("%d %d", &tasks[i].result, &tasks[i].time);
     }
-    // Wait for results.
-    int sum;
+    // Obliczenia.
     int i_nk = 0;
     for (int i_k = 0; i_k < k; i_k++) {
         reset_monitor();
@@ -100,11 +107,13 @@ int main() {
             defer(&pool, (runnable_t){.function = compute, .arg = &tasks[i_nk], .argsz = sizeof(task_t)});
             i_nk++;
         }
-        // Print sum in `i_k` row.
+        // Oczekiwanie na wynik, wypisanie wyniku.
         wait_on_complete();
     }
-    // Free resources.
+    // Zwolnienie zasobów.
     thread_pool_destroy(&pool);
+    pthread_cond_destroy(&matrix_monitor.wait);
+    pthread_mutex_destroy(&matrix_monitor.lock);
     free(computations);
     free(tasks);
     return 0;

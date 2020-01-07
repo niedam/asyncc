@@ -11,6 +11,12 @@ typedef struct factorial {
 } factorial_t;
 
 
+/** @brief Funkcja wykonująca mnożenie iloczynu
+ * @param args[in] - argumenty (typu `factorial_t`)
+ * @param argsz[in] - rozmiar argumentu (nieużywany)
+ * @param result_size[out] - rozmiar wyniku
+ * @return Wskaźnik na wynik mnożenia args.value * n
+ */
 static void *multiply(void *args, size_t argsz __attribute__((unused)), size_t *result_size) {
     factorial_t *arg_fac = args;
     *result_size = sizeof(factorial_t);
@@ -26,22 +32,31 @@ int main() {
     if (thread_pool_init(&pool, POOL_SIZE) != 0) {
         return -1;
     }
+    // Wczytanie liczby z której obliczamy silnie.
     int n;
     scanf("%d", &n);
+    // Zainicjowanie pierwszego obliczenia.
     factorial_t *comp = malloc(sizeof(factorial_t));
     comp->n = n;
     comp->value = 1;
     future_t *future = malloc(sizeof(future_t) * n);
     if (async(&pool, future, (callable_t){.function = multiply, .arg = comp, .argsz = sizeof(factorial_t)}) != 0) {
-        // TODO;
+        fprintf(stderr, "Nie udało się zlecić zadania pierwszego.\n");
         return -1;
     }
+    // Powiązanie future w łańcuch obliczający silnię.
     for (int i = 1; i < n; i++) {
-        map(&pool, future + i, future + (i - 1), multiply);
+        if (map(&pool, future + i, future + (i - 1), multiply) != 0) {
+            fprintf(stderr, "Błąd przy zleceniu obliczenia nr. %d", i + 1);
+            return -1;
+        }
     }
+    // Odebranie wyniku i wypisanie go.
     factorial_t *result = await(&future[n - 1]);
     printf("%llu", result->value);
+    // Zwolnienie zasobów.
     thread_pool_destroy(&pool);
     free(result);
     free(future);
+    return 0;
 }

@@ -2,26 +2,33 @@
 #include <stdio.h>
 #include <sys/unistd.h>
 
-static void *printX(void *args) {
+static void printX(void *args, size_t a) {
     printf("X");
-    //sleep(1);
-    return NULL;
+    usleep(1000);
+    return;
 }
 
-static void *printY(void *args) {
+static void printY(void *args, size_t a) {
     printf("Y");
     //sleep(1);
     //printf("A");
-    return NULL;
+    return;
 }
 
 
-void *stop(void *parm) {
-
+static void printZ(void *args, size_t b) {
+    printf("Z");
+    usleep(1000);
+    //sleep(1);
+    //printf("A");
+    return;
 }
+
 
 int main() {
     struct thread_pool a;
+    struct thread_pool b;
+    struct thread_pool c;
     int err;
     pthread_attr_t attr;
     pthread_t thread;
@@ -34,15 +41,50 @@ int main() {
         return -1;
     }*/
 
-    thread_pool_init(&a, 10);
+    thread_pool_init(&a, 8);
+    thread_pool_init(&b, 4);
+    thread_pool_init(&c, 2);
 
 
-    for (int i = 0; i < 100000000; i++) {
-        if (defer(&a, (runnable_t) {.argsz=1, .function=printX, .arg=NULL}) != 0) {
-            break;
+    for (int i = 0; i < 1000 * 1000; i++) {
+        int j = i % 3;
+        if (j == 0) {
+            if (defer(&a, (runnable_t) {.argsz=1, .function=printX, .arg=NULL}) != 0) {
+                break;
+            }
+        } else if (j == 1) {
+            if (defer(&b, (runnable_t) {.argsz=1, .function=printY, .arg=NULL}) != 0) {
+                break;
+            }
+        } else {
+            if (defer(&c, (runnable_t) {.argsz=1, .function=printZ, .arg=NULL}) != 0) {
+                break;
+            }
         }
     }
+    printf("\n teraz to\n");
     thread_pool_join_signaled();
+    thread_pool_destroy(&a);
+    thread_pool_destroy(&b);
+    thread_pool_destroy(&c);
+    /*thread_pool_t d;
+    thread_pool_init(&d, 3);
+    for (int i = 0; i <= 1000 * 1000 * 1000; i++) {
+        defer(&d, (runnable_t) {.argsz=1, .function=printZ, .arg=NULL});
+    }
+
+
+    thread_pool_t e;
+    thread_pool_init(&e, 3);
+    for (int i = 0; i <= 1000 * 1000; i++) {
+        defer(&e, (runnable_t) {.argsz=1, .function=printX, .arg=NULL});
+    }*/
+
+    //thread_pool_destroy(&d);
+
+    //thread_pool_join_signaled();
+    //thread_pool_destroy(&e);
+    //sleep(2);
     //thread_pool_destroy(&a);
 
     /*if ((err = pthread_create(&thread, &attr, stop, &a)) != 0) {

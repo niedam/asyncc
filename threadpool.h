@@ -62,6 +62,7 @@ void thread_pool_destroy(thread_pool_t *pool);
 /** @brief Czeka na wątki przerwane sygnałem SIGINT.
  * Funkcja blokuje aktualny proces do czasu, aż wszystkie pule
  * przerwane sygnałem SIGINT zakończą swoją pracę.
+ * Do poprawnego działania wymagane jest wysłanie wygnału SIGINT przez użytkownika biblioteki.
  * @return void
  */
 void thread_pool_join_signaled();

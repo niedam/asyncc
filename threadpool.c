@@ -44,6 +44,7 @@ static void destroy_monitor() {
     }
     return;
     really_fatal_exception:
+        fprintf(stderr, "1");
         _Exit(EXIT_FAILURE);
 }
 
@@ -75,6 +76,7 @@ static void thread_pool_signal_done() {
     }
     return;
     fatal_exception:
+        fprintf(stderr, "2");
         exit(EXIT_FAILURE);
 }
 
@@ -182,6 +184,7 @@ static circ_queue_node_t *thread_pool_monitor(thread_pool_t *pool) {
     exception:
         return NULL;
     fatal_exception:
+        fprintf(stderr, "3");
         exit(EXIT_FAILURE);
 }
 
@@ -220,6 +223,7 @@ static void thread_pool_unmonitor(void *node) {
     free(node);
     return;
     fatal_exception:
+    fprintf(stderr, "4");
         exit(EXIT_FAILURE);
 }
 
@@ -294,6 +298,7 @@ static void *workers(void *arg) {
         free(node);
     }
     fatal_exception:
+    fprintf(stderr, "5");
         exit(EXIT_FAILURE);
 }
 
@@ -383,6 +388,7 @@ int thread_pool_init(thread_pool_t *pool, size_t num_threads) {
         }
         return -1;
     fatal_exception:
+    fprintf(stderr, "6");
         exit(EXIT_FAILURE);
 }
 
@@ -428,15 +434,22 @@ void thread_pool_destroy(thread_pool_t *pool) {
     free(pool->waiting_workers);
     return;
     fatal_exception:
+    fprintf(stderr, "7");
         exit(EXIT_FAILURE);
 }
+
 
 void thread_pool_join_signaled() {
     if (pthread_mutex_lock(&monitor.lock) != 0) {
         fprintf(stderr, "Mutex lock failure in thread_poll_join_signaled\n");
         goto fatal_exception;
     }
-    while (monitor.signaled != monitor.count_threads) {
+    monitor.flag[0] = 1;
+    monitor.turn = 1;
+    while (monitor.flag[1] == 1 && monitor.turn == 1) {
+        // aktywne oczekiwanie
+    }
+    while (monitor.signaled != monitor.count_threads && monitor.signaled == 0) {
         if (pthread_cond_wait(&monitor.wait, &monitor.lock) != 0) {
             fprintf(stderr, "Cond wait failure in thread_poll_join_signaled\n");
             goto fatal_exception;
@@ -444,11 +457,14 @@ void thread_pool_join_signaled() {
     }
     monitor.signaled = 0;
     monitor.count_threads = 0;
+    monitor.flag[0] = 0;
     if (pthread_mutex_unlock(&monitor.lock) != 0) {
         fprintf(stderr, "Mutex unlock failure in thread_poll_join_signaled\n");
         goto fatal_exception;
     }
+    return;
     fatal_exception:
+    fprintf(stderr, "8");
         exit(EXIT_FAILURE);
 }
 
@@ -498,5 +514,6 @@ int defer(thread_pool_t *pool, runnable_t runnable) {
     exception:
         return -1;
     fatal_exception:
+    fprintf(stderr, "9");
         exit(EXIT_FAILURE);
 }
