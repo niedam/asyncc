@@ -10,9 +10,12 @@
  * Za zarządzanie pamięcią tej struktury odpowiada użytkownik biblioteki.
  */
 typedef struct runnable {
-  void (*function)(void *, size_t); /**< Funkcja `fun(arg, size)` gdzie `arg` to wskaźnika na argument funkcji,
-                                     *   a size to rozmiar pamięci wskazywanej przez argument.
-                                     */
+  void (*function)(void *, size_t);
+  /**< @brief Funkcja do asynchronicznego wykonania.
+   * @param arg[in, out] - wskaźnik na argument funkcji
+   * @param args[in] - rozmiar argumentu funkcji
+   * @result void
+   */
   void *arg; /**< Wskaźnik na argument. */
   size_t argsz; /**< Rozmiar pamięci na którą wskazuje `arg`. */
 } runnable_t;

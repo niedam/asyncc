@@ -5,15 +5,26 @@
 
 typedef void *(*function_t)(void *);
 
+/** @brief Struktura będąca argumentem dla `async`.
+ */
 typedef struct future_call {
-    future_t *future;
-    callable_t callable;
+    future_t *future; /**< Future gdzie ma być zapisany wynik. */
+    callable_t callable; /**< Przypisane zadanie do wykonania. */
 } future_call_t;
 
+
+/** @brief Struktura będąca argumentem dla `async`.
+ */
 typedef struct map_call {
-    future_t *from;
-    future_t *result;
+    future_t *from; /**< Future z którego ma pochodzić argument. */
+    future_t *result; /**< Future gdzie mamy zapisać wynik. */
     void *(*function)(void *, size_t, size_t *);
+    /**< @brief Funkcja do wykonania.
+     *  @param arg[in, out] - wskaźnik na argument funkcji
+     *  @param size[in] - rozmiar argumentu funkcji
+     *  @param rsiz[out] - wskaźnik gdzie funkcja może wpisać rozmiar wyniku
+     *  @return Wskaźnik do wyniku funkcji.
+     */
 } map_call_t;
 
 
@@ -138,7 +149,7 @@ void *await(future_t *future) {
     }
     return future->result;
     fatal_exception:
-        exit(EXIT_FAILURE);
+    exit(EXIT_FAILURE);
 }
 
 
@@ -154,8 +165,9 @@ int map(thread_pool_t *pool, future_t *future, future_t *from,
     map_call->function = function;
     map_call->from = from;
     map_call->result = future;
-    if (defer(pool,(runnable_t){.function=call_map, .arg=map_call, .argsz=sizeof(map_call_t)}) != 0)
+    if (defer(pool,(runnable_t){.function=call_map, .arg=map_call, .argsz=sizeof(map_call_t)}) != 0) {
         goto exception;
+    }
     return 0;
     exception:
         return -1;
