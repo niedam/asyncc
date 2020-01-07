@@ -66,7 +66,7 @@ void thread_pool_join_signaled();
 
 /** @brief Zlecenie nowego zadania dla puli `thread_pool`
  * Funkcja zleca do asynchronicznego wykonania przez pulę zadanie `runnable`.
- * @param pool[in, out] - wskaznik na pulę wątków
+ * @param pool[in, out] - wskaznik na pulę wątków roboczych
  * @param runnable[in, out] - zadanie do wykonania
  * @return Wartość `0` jeżeli udało się pomyślnie zlecić zadanie, w przeciwnym wypadku liczbę ujemną
  */
