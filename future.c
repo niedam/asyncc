@@ -55,6 +55,7 @@ static void call_comp(void *arg, size_t args __attribute__((unused))) {
         goto fatal_exception;
     }
     free(arg);
+    return;
     fatal_exception:
         exit(EXIT_FAILURE);
 }
