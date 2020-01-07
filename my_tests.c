@@ -42,8 +42,8 @@ int main() {
             break;
         }
     }
-
-    thread_pool_destroy(&a);
+    thread_pool_join_signaled();
+    //thread_pool_destroy(&a);
 
     /*if ((err = pthread_create(&thread, &attr, stop, &a)) != 0) {
         fprintf(stderr, "%d: Pthread_t create failure in thread_pool_init\n", err);

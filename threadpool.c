@@ -13,10 +13,9 @@ static struct thread_pool_monitor {
     int flag[2];
     int turn;
     int signaled;
-    void *threads;
     int count_threads;
 } monitor = {.lock = PTHREAD_MUTEX_INITIALIZER, .queue = NULL, .used = 0, .flag = {0, 0}, .signaled = 0,
-        .wait = PTHREAD_COND_INITIALIZER, .threads = NULL, .count_threads = 0};
+        .wait = PTHREAD_COND_INITIALIZER, .count_threads = 0};
 
 typedef struct circ_queue_node {
     thread_pool_t *pool;
@@ -31,27 +30,6 @@ typedef struct join_queue_node {
 
 
 void destroy_monitor() {
-    if (pthread_mutex_lock(&monitor.lock) != 0) {
-        goto really_fatal_exception;
-    }
-    while (monitor.signaled != monitor.count_threads) {
-        if (pthread_cond_wait(&monitor.wait, &monitor.lock) != 0) {
-            goto really_fatal_exception;
-        }
-    }
-    join_queue_node_t *next, *curr = monitor.threads;
-    void *a;
-    while (curr != NULL) {
-        if (pthread_join(curr->thread, &a) != 0) {
-            goto really_fatal_exception;
-        }
-        next = curr->next;
-        free(curr);
-        curr = next;
-    }
-    if (pthread_mutex_unlock(&monitor.lock) != 0) {
-        goto really_fatal_exception;
-    }
     if (pthread_mutex_destroy(&monitor.lock) != 0  ||
         pthread_cond_destroy(&monitor.wait) != 0) {
         goto really_fatal_exception;
@@ -62,17 +40,11 @@ void destroy_monitor() {
 }
 
 
-static void thread_pool_joinme() {
+static void thread_pool_signal_done() {
     join_queue_node_t *node = malloc(sizeof(join_queue_node_t));
     if (node == NULL) {
         exit(EXIT_FAILURE);
     }
-    node->thread = pthread_self();
-    if (pthread_mutex_lock(&monitor.lock) != 0) {
-        exit(EXIT_FAILURE);
-    }
-    node->next = monitor.queue;
-    monitor.queue = node;
     monitor.count_threads++;
     if (monitor.signaled == monitor.count_threads) {
         if (pthread_cond_signal(&monitor.wait) != 0) {
@@ -251,7 +223,7 @@ static void *workers(void *arg) {
                 } else {
                     pthread_detach(pthread_self());
                     thread_pool_destroy(pool);
-                    thread_pool_joinme();
+                    thread_pool_signal_done();
                     pthread_exit(EXIT_SUCCESS);
                 }
             }
@@ -393,6 +365,25 @@ void thread_pool_destroy(struct thread_pool *pool) {
     exit(EXIT_FAILURE);
 }
 }
+
+void thread_pool_join_signaled() {
+    if (pthread_mutex_lock(&monitor.lock) != 0) {
+        goto fatal_exception;
+    }
+    while (monitor.signaled != monitor.count_threads) {
+        if (pthread_cond_wait(&monitor.wait, &monitor.lock) != 0) {
+            goto fatal_exception;
+        }
+    }
+    monitor.signaled = 0;
+    monitor.count_threads = 0;
+    if (pthread_mutex_unlock(&monitor.lock) != 0) {
+        goto fatal_exception;
+    }
+    fatal_exception:
+        exit(EXIT_FAILURE);
+}
+
 
 int defer(struct thread_pool *pool, runnable_t runnable) {
     int err = 0;
