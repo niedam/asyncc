@@ -21,6 +21,7 @@ typedef struct thread_pool {
     size_t defered_tasks; /**<  */
     size_t count_waiting_workers; /**<  */
     int destroy;
+    int signal;
 } thread_pool_t;
 
 int thread_pool_init(thread_pool_t *pool, size_t pool_size);

@@ -30,7 +30,7 @@ struct matrix_monitor {
  */
 static void compute(void *args, size_t argsz __attribute__((unused))) {
     task_t *t = args;
-    usleep(t->time);
+    usleep(t->time * 1000);
     if (pthread_mutex_lock(&matrix_monitor.lock) != 0) {
         exit(EXIT_FAILURE);
     }

@@ -39,7 +39,7 @@ int main() {
 
     for (int i = 0; i < 100000000; i++) {
         if (defer(&a, (runnable_t) {.argsz=1, .function=printX, .arg=NULL}) != 0) {
-            printf("NJE\n");
+            break;
         }
     }
 
