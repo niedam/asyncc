@@ -85,9 +85,9 @@ int main() {
     int err;
     thread_pool_t pool;
     // Inicjacja puli.
-    if ((err = thread_pool_init(&pool, POOLSIZE)) != 0) {
-        fprintf(stderr, "%d: Pool init failure in macierz\n", err);
-        return(-1);
+    if (thread_pool_init(&pool, POOLSIZE) != 0) {
+        fprintf(stderr, "Inicjacja puli wątków nie powiodła się\n");
+        return -1;
     }
     // Przeczytanie rozmiaru macierzy.
     scanf("%d", &k);
@@ -95,6 +95,10 @@ int main() {
     // Zaalokowanie zasobów.
     future_t *computations = malloc(sizeof(future_t) * k * n);
     task_t *tasks = malloc(sizeof(struct task) * k * n);
+    if (computations == NULL || tasks == NULL) {
+        fprintf(stderr, "Nie udało się zaalokować pamięci.\n");
+        return -1;
+    }
     // Przypisywanie zadań.
     for (int i = 0; i < k * n; i++) {
         scanf("%d %d", &tasks[i].result, &tasks[i].time);

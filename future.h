@@ -2,7 +2,6 @@
 #define FUTURE_H
 
 #include <pthread.h>
-
 #include "threadpool.h"
 
 /** @brief Struktura `callable`.

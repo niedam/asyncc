@@ -3,7 +3,6 @@
 #include "future.h"
 
 #define POOL_SIZE 3
-#define TEST 10
 
 typedef struct factorial {
     unsigned long long value;
@@ -21,6 +20,10 @@ static void *multiply(void *args, size_t argsz __attribute__((unused)), size_t *
     factorial_t *arg_fac = args;
     *result_size = sizeof(factorial_t);
     factorial_t *result = malloc(*result_size);
+    if (result == NULL) {
+        fprintf(stderr, "Nie udało się zaalokować pamięci.\n");
+        return -1;
+    }
     result->value = arg_fac->value * arg_fac->n;
     result->n = arg_fac->n - 1;
     free(arg_fac);
@@ -37,9 +40,17 @@ int main() {
     scanf("%d", &n);
     // Zainicjowanie pierwszego obliczenia.
     factorial_t *comp = malloc(sizeof(factorial_t));
+    if (comp == NULL) {
+        fprintf(stderr, "Nie udało się zaalokować pamięci.\n");
+        return -1;
+    }
     comp->n = n;
     comp->value = 1;
     future_t *future = malloc(sizeof(future_t) * n);
+    if (future == NULL) {
+        fprintf(stderr, "Nie udało się zaalokować pamięci.\n");
+        return -1;
+    }
     if (async(&pool, future, (callable_t){.function = multiply, .arg = comp, .argsz = sizeof(factorial_t)}) != 0) {
         fprintf(stderr, "Nie udało się zlecić zadania pierwszego.\n");
         return -1;
